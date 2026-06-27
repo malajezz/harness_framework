@@ -7,7 +7,7 @@
       "name": "project-setup",
       "status": "completed",
       "started_at": "2026-06-27T15:27:23+0900",
-      "completed_at": "2026-06-27T15:31:56+0900",
+      "completed_at": "2026-06-27T15:32:38+0900",
       "summary": "Next.js 15(App Router·TS strict·Tailwind v4·ESLint, src/, @/* alias) 스캐폴딩 + @anthropic-ai/sdk 설치. src/{types,lib,services,components,app/api/analyze} 골격 생성, 서버 전용 env 헬퍼(src/lib/env.ts: getYoutubeApiKey/getAnthropicApiKey), 다크 고정 placeholder page/globals.css, test 스크립트 추가. build/lint 통과."
     }
   ],
