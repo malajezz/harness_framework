@@ -52,7 +52,7 @@ src/
 | `types/index.ts` | 공유 타입 한 파일 | 런타임 코드 ✗ |
 
 ## 의존성 화이트리스트 (이것만, 추가 금지)
-`next` · `react` · `tailwindcss`(scaffold), `@anthropic-ai/sdk`, `vitest`(dev). YouTube는 내장 `fetch`로 직접 호출(별도 클라이언트 라이브러리 없음).
+`next` · `react` · `tailwindcss`(scaffold), `@anthropic-ai/claude-agent-sdk`, `vitest`(dev). YouTube는 내장 `fetch`로 직접 호출(별도 클라이언트 라이브러리 없음). Claude는 agent-sdk가 이 기기의 Claude Code 구독 자격증명으로 인증하므로 ANTHROPIC_API_KEY가 필요 없다.
 
 ## viral 정의
 viral 점수 = **일평균 조회수**(`viewCount / 업로드 후 경과일`). 이 단일 지표로 정렬한다. 구독자 가중치 등 추가 지표는 MVP에서 쓰지 않는다.

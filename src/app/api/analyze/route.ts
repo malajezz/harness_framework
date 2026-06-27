@@ -11,7 +11,7 @@ import {
 import { analyzeChannel, recommendContent } from "@/services/claude";
 import { viewsPerDay } from "@/lib/viral-score";
 
-export const runtime = "nodejs"; // @anthropic-ai/sdk 호환
+export const runtime = "nodejs"; // Agent SDK가 서브프로세스를 띄우므로 Node 런타임 필요(Edge 불가)
 export const dynamic = "force-dynamic"; // 매 요청 실시간 조회(stateless)
 
 const TOP_VIRAL = 5;
