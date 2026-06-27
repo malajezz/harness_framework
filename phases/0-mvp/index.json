@@ -25,8 +25,25 @@
       "started_at": "2026-06-27T16:15:09+0900",
       "completed_at": "2026-06-27T16:19:07+0900",
       "summary": "youtube.ts 함수 + viral-score/channel-url 유틸 + 테스트"
+    },
+    {
+      "step": 3,
+      "name": "claude-service",
+      "status": "completed",
+      "started_at": "2026-06-27T16:24:18+0900",
+      "completed_at": "2026-06-27T16:27:52+0900",
+      "summary": "claude.ts analyzeChannel/recommendContent + 모델 claude-sonnet-4-6 + tool use(structured output) 구조화출력 방식"
+    },
+    {
+      "step": 4,
+      "name": "api-route",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "ui",
+      "status": "pending"
     }
   ],
-  "created_at": "2026-06-27T15:27:23+0900",
-  "completed_at": "2026-06-27T16:19:07+0900"
+  "created_at": "2026-06-27T15:27:23+0900"
 }
