@@ -51,5 +51,6 @@
       "summary": "page.tsx + ChannelSummary/ViralList/RecommendationCard, /api/analyze 연동. useState 4개(input/loading/result/error), 입력→로딩→결과/에러 전환. 표시 전용 컴포넌트(props만), UI_GUIDE 다크 고정·red-500은 viral 강조에만·fade-in 결과만, 안티패턴 없음. build/lint/test 통과. 수동 스모크는 키 설정 후 필요."
     }
   ],
-  "created_at": "2026-06-27T15:27:23+0900"
+  "created_at": "2026-06-27T15:27:23+0900",
+  "completed_at": "2026-06-27T16:35:48+0900"
 }
