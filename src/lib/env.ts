@@ -17,6 +17,6 @@ export function getYoutubeApiKey(): string {
   return readRequiredEnv("YOUTUBE_API_KEY");
 }
 
-export function getAnthropicApiKey(): string {
-  return readRequiredEnv("ANTHROPIC_API_KEY");
-}
+// 참고: Claude는 @anthropic-ai/claude-agent-sdk가 이 기기의 Claude Code 자격증명
+// (Pro/Max 구독 또는 CLAUDE_CODE_OAUTH_TOKEN)으로 인증하므로 환경변수 키가 필요 없다.
+// ANTHROPIC_API_KEY를 설정하면 구독보다 우선되어 종량제 과금되니 .env.local에 넣지 말 것.
