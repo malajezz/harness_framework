@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* 다크 고정 (UI_GUIDE): 페이지 배경 #0a0a0a, 기본 텍스트 흰색 */
+body {
+  background: #0a0a0a;
+  color: #ffffff;
+}

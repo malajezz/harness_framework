@@ -4,6 +4,9 @@ out/
 next-env.d.ts
 tsconfig.tsbuildinfo
 
+# 환경변수 (실제 키)
+.env*.local
+
 # phase execution outputs
 phases/**/phase*-output.json
 phases/**/step*-output.json
