@@ -37,7 +37,10 @@
     {
       "step": 4,
       "name": "api-route",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-27T16:28:37+0900",
+      "completed_at": "2026-06-27T16:29:51+0900",
+      "summary": "/api/analyze POST 파이프라인(resolve→recent→analyze→search→score→recommend)"
     },
     {
       "step": 5,
