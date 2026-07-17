@@ -54,6 +54,7 @@ class StepExecutor:
     """Phase 디렉토리 안의 step들을 순차 실행하는 하네스."""
 
     MAX_RETRIES = 3
+    TIMEOUT_SEC = 1800
     FEAT_MSG = "feat({phase}): step {num} — {name}"
     CHORE_MSG = "chore({phase}): step {num} output"
     TZ = timezone(timedelta(hours=9))
@@ -76,6 +77,9 @@ class StepExecutor:
             sys.exit(1)
 
         idx = self._read_json(self._index_file)
+        if not isinstance(idx.get("steps"), list):
+            print(f"ERROR: {self._index_file}에 'steps' 배열이 없습니다")
+            sys.exit(1)
         self._project = idx.get("project", "project")
         self._phase_name = idx.get("phase", phase_dir_name)
         self._total = len(idx["steps"])
@@ -83,6 +87,7 @@ class StepExecutor:
     def run(self):
         self._print_header()
         self._check_blockers()
+        self._check_clean_tree()
         self._checkout_branch()
         guardrails = self._load_guardrails()
         self._ensure_created_at()
@@ -98,7 +103,13 @@ class StepExecutor:
 
     @staticmethod
     def _read_json(p: Path) -> dict:
-        return json.loads(p.read_text(encoding="utf-8"))
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            # index.json은 Claude가 직접 편집한다 — 파손이 정상 실패 모드다.
+            print(f"\n  ERROR: {p} 가 올바른 JSON이 아닙니다 (line {e.lineno}, col {e.colno}): {e.msg}")
+            print(f"  Hint: git checkout -- {p}")
+            sys.exit(1)
 
     @staticmethod
     def _write_json(p: Path, data: dict):
@@ -109,6 +120,22 @@ class StepExecutor:
     def _run_git(self, *args) -> subprocess.CompletedProcess:
         cmd = ["git"] + list(args)
         return subprocess.run(cmd, cwd=self._root, capture_output=True, text=True)
+
+    def _check_clean_tree(self):
+        """커밋은 'git add -A'다 — 무관한 워킹트리 변경이 step 커밋에 섞이는 걸 먼저 막는다."""
+        r = self._run_git("status", "--porcelain")
+        if r.returncode != 0 or not r.stdout.strip():
+            return
+
+        print("\n  ERROR: 워킹트리에 커밋되지 않은 변경이 있습니다.")
+        print("  하네스는 'git add -A'로 커밋하므로 아래 변경이 step 커밋에 섞입니다.")
+        lines = r.stdout.strip().splitlines()
+        for line in lines[:10]:
+            print(f"    {line}")
+        if len(lines) > 10:
+            print(f"    … 외 {len(lines) - 10}개")
+        print("  commit 또는 stash 후 다시 시도하세요.")
+        sys.exit(1)
 
     def _checkout_branch(self):
         branch = f"feat-{self._phase_name}"
@@ -234,25 +261,34 @@ class StepExecutor:
             print(f"  ERROR: {step_file} not found")
             sys.exit(1)
 
-        prompt = preamble + step_file.read_text()
-        result = subprocess.run(
-            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
-            cwd=self._root, capture_output=True, text=True, timeout=1800,
-        )
-
-        if result.returncode != 0:
-            print(f"\n  WARN: Claude가 비정상 종료됨 (code {result.returncode})")
-            if result.stderr:
-                print(f"  stderr: {result.stderr[:500]}")
+        prompt = preamble + step_file.read_text(encoding="utf-8")
+        timed_out = False
+        try:
+            result = subprocess.run(
+                ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
+                cwd=self._root, capture_output=True, text=True, timeout=self.TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired as e:
+            # 30분 타임아웃은 이 하네스에서 가장 흔한 실패다. 크래시로 새면 재시도가 통째로 죽는다.
+            timed_out = True
+            print(f"\n  WARN: Claude가 {self.TIMEOUT_SEC}초 타임아웃으로 중단됨")
+            result = subprocess.CompletedProcess(
+                args=e.cmd, returncode=-1, stdout=e.stdout or "", stderr=e.stderr or "",
+            )
+        else:
+            if result.returncode != 0:
+                print(f"\n  WARN: Claude가 비정상 종료됨 (code {result.returncode})")
+                if result.stderr:
+                    print(f"  stderr: {result.stderr[:500]}")
 
         output = {
             "step": step_num, "name": step_name,
             "exitCode": result.returncode,
+            "timedOut": timed_out,
             "stdout": result.stdout, "stderr": result.stderr,
         }
         out_path = self._phase_dir / f"step{step_num}-output.json"
-        with open(out_path, "w") as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
+        self._write_json(out_path, output)
 
         return output
 
@@ -306,7 +342,7 @@ class StepExecutor:
                 tag += f" [retry {attempt}/{self.MAX_RETRIES}]"
 
             with progress_indicator(tag) as pi:
-                self._invoke_claude(step, preamble)
+                output = self._invoke_claude(step, preamble)
                 elapsed = int(pi.elapsed)
 
             index = self._read_json(self._index_file)
@@ -333,9 +369,15 @@ class StepExecutor:
                 self._update_top_index("blocked")
                 sys.exit(2)
 
+            # 타임아웃은 status를 남기지 못한다 — "Step did not update status"로 보고하면
+            # 원인이 감춰지고 재시도 프롬프트에도 엉뚱한 사유가 들어간다.
+            default_err = (
+                f"{self.TIMEOUT_SEC}초 타임아웃 — Claude가 응답을 끝내지 못했다"
+                if output.get("timedOut") else "Step did not update status"
+            )
             err_msg = next(
-                (s.get("error_message", "Step did not update status") for s in index["steps"] if s["step"] == step_num),
-                "Step did not update status",
+                (s.get("error_message", default_err) for s in index["steps"] if s["step"] == step_num),
+                default_err,
             )
 
             if attempt < self.MAX_RETRIES:
@@ -366,6 +408,16 @@ class StepExecutor:
             index = self._read_json(self._index_file)
             pending = next((s for s in index["steps"] if s["status"] == "pending"), None)
             if pending is None:
+                # pending이 없다고 완료가 아니다. Claude가 'in_progress' 같은 값을 쓰면
+                # 그 step은 영영 실행되지 않는데 phase는 completed로 보고된다.
+                stuck = [s for s in index["steps"] if s["status"] != "completed"]
+                if stuck:
+                    print("\n  ✗ 실행 가능한 step이 없는데 완료되지 않은 step이 남아 있습니다:")
+                    for s in stuck:
+                        print(f"    Step {s['step']} ({s['name']}): status={s['status']!r}")
+                    print("  status를 'pending'으로 되돌린 후 다시 시도하세요.")
+                    self._update_top_index("error")
+                    sys.exit(1)
                 print("\n  All steps completed!")
                 return
 
