@@ -557,3 +557,114 @@ class TestCheckBlockers:
         with pytest.raises(SystemExit) as exc_info:
             inst._check_blockers()
         assert exc_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# 타임아웃 — 30분 LLM 호출에서 가장 흔한 실패다. 재시도 밖으로 새면 안 된다.
+# ---------------------------------------------------------------------------
+
+class TestTimeout:
+    def test_timeout_does_not_escape_as_exception(self, executor):
+        """TimeoutExpired가 크래시로 새어나가면 안 된다 — 재시도 경로를 타야 한다."""
+        step = {"step": 2, "name": "ui"}
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1800)):
+            output = executor._invoke_claude(step, "preamble")
+        assert output["timedOut"] is True
+        assert output["exitCode"] != 0
+
+    def test_timeout_is_retried_then_fails_cleanly(self, executor):
+        """타임아웃이 반복되면 MAX_RETRIES만큼 재시도한 뒤 error로 기록하고 종료한다."""
+        executor._run_git = lambda *a: MagicMock(returncode=0, stdout="", stderr="")
+        step = {"step": 2, "name": "ui"}
+
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1800)):
+            with pytest.raises(SystemExit) as exc_info:
+                executor._execute_single_step(step, "")
+
+        assert exc_info.value.code == 1
+        index = ex.StepExecutor._read_json(executor._index_file)
+        s = next(s for s in index["steps"] if s["step"] == 2)
+        assert s["status"] == "error"
+        assert "타임아웃" in s["error_message"]
+
+    def test_timeout_output_is_persisted(self, executor):
+        """타임아웃도 step-output.json에 남아야 사후 추적이 된다."""
+        step = {"step": 2, "name": "ui"}
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1800)):
+            executor._invoke_claude(step, "preamble")
+        data = json.loads((executor._phase_dir / "step2-output.json").read_text())
+        assert data["timedOut"] is True
+
+
+# ---------------------------------------------------------------------------
+# 비정규 status — LLM이 'in_progress' 같은 값을 쓰면 조용히 건너뛰면 안 된다.
+# ---------------------------------------------------------------------------
+
+class TestNonCanonicalStatus:
+    def test_unknown_status_is_not_silent_success(self, executor):
+        """pending이 없어도 completed가 아닌 step이 남아 있으면 성공으로 보고하지 않는다."""
+        index = {
+            "project": "TestProject", "phase": "mvp",
+            "steps": [
+                {"step": 0, "name": "setup", "status": "completed", "summary": "s"},
+                {"step": 1, "name": "core", "status": "in_progress"},
+                {"step": 2, "name": "ui", "status": "completed", "summary": "u"},
+            ],
+        }
+        executor._index_file.write_text(json.dumps(index, ensure_ascii=False))
+
+        with pytest.raises(SystemExit) as exc_info:
+            executor._execute_all_steps("")
+        assert exc_info.value.code == 1
+
+    def test_all_completed_still_succeeds(self, executor):
+        """정상 경로는 그대로 — 전부 completed면 조용히 반환한다."""
+        index = {
+            "project": "TestProject", "phase": "mvp",
+            "steps": [
+                {"step": 0, "name": "setup", "status": "completed", "summary": "s"},
+                {"step": 1, "name": "ui", "status": "completed", "summary": "u"},
+            ],
+        }
+        executor._index_file.write_text(json.dumps(index, ensure_ascii=False))
+        executor._execute_all_steps("")  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# clean tree — 'git add -A'가 무관한 워킹트리 변경을 step 커밋에 쓸어담는다.
+# ---------------------------------------------------------------------------
+
+class TestCleanTree:
+    def test_dirty_tree_exits(self, executor):
+        executor._run_git = lambda *a: MagicMock(
+            returncode=0, stdout=" M docs/ADR.md\n?? HANDOFF.md\n", stderr=""
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            executor._check_clean_tree()
+        assert exc_info.value.code == 1
+
+    def test_clean_tree_passes(self, executor):
+        executor._run_git = lambda *a: MagicMock(returncode=0, stdout="", stderr="")
+        executor._check_clean_tree()  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# index.json 파손 — LLM이 직접 편집하는 파일이다.
+# ---------------------------------------------------------------------------
+
+class TestCorruptIndex:
+    def test_malformed_json_exits_cleanly(self, tmp_path):
+        p = tmp_path / "broken.json"
+        p.write_text('{"steps": [', encoding="utf-8")
+        with pytest.raises(SystemExit) as exc_info:
+            ex.StepExecutor._read_json(p)
+        assert exc_info.value.code == 1
+
+    def test_missing_steps_key_exits(self, tmp_project):
+        d = tmp_project / "phases" / "nosteps"
+        d.mkdir()
+        (d / "index.json").write_text(json.dumps({"project": "T", "phase": "t"}))
+        with patch.object(ex, "ROOT", tmp_project):
+            with pytest.raises(SystemExit) as exc_info:
+                ex.StepExecutor("nosteps")
+        assert exc_info.value.code == 1

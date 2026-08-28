@@ -4,9 +4,19 @@ out/
 next-env.d.ts
 tsconfig.tsbuildinfo
 
-# 환경변수 (실제 키)
+# 환경변수 — API 키가 여기 들어간다. 절대 커밋하지 말 것.
+.env
 .env*.local
+.env.*
+!.env.example
 
 # phase execution outputs
 phases/**/phase*-output.json
 phases/**/step*-output.json
+
+# harness 스크립트 (execute.py) 실행 산출물
+__pycache__/
+.pytest_cache/
+
+# Claude Code local settings
+.claude/settings.local.json
