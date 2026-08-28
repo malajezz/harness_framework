@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* 다크 고정 (UI_GUIDE): 페이지 배경 #0a0a0a, 기본 텍스트 흰색 */
+body {
+  background: #0a0a0a;
+  color: #ffffff;
+}
+
+/* 결과 표시에만 쓰는 fade-in (UI_GUIDE: 0.3s). 그 외 애니메이션 금지. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-in {
+  animation: fade-in 0.3s ease-out;
+}
