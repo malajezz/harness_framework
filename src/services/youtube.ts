@@ -82,7 +82,10 @@ export async function searchViralVideos(
     part: "snippet",
     type: "video",
     order: "viewCount",
-    q: keywords.join(" "),
+    // OR 구문 검색: 각 키워드를 따옴표로 감싼 구문으로 만들어 `|`로 OR 결합한다.
+    // 따옴표가 없으면 YouTube가 단어 단위로 쪼개 사실상 AND처럼 좁혀버려(다중 단어
+    // 키워드 5개 기준 매칭 54건) 키워드를 나열한 스팸 영상만 남는다.
+    q: keywords.map((k) => `"${k.replace(/"/g, "")}"`).join("|"),
     publishedAfter,
     maxResults: String(max),
   });
